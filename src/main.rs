@@ -13,8 +13,10 @@ struct MainPage {
     text: String,
     tree_nodes: String,
     tree: Node,
-    //insert_text: String,
-    //insert: i32,
+    insert_text: String,
+    insert: i32,
+    search_text: String,
+    search: i32,
     result: String,
 }
 
@@ -23,6 +25,10 @@ enum Message {
     TreeNodes(String),
     Submit,
     Result(String),
+    Insert,
+    InsertValue(String),
+    Search,
+    SearchValue(String),
 }
 
 //trees
@@ -79,6 +85,21 @@ impl Node {
                 node.left.as_mut().unwrap().insert(value);
             }
         }
+    }
+
+    fn search(&self, value: i32) -> bool {
+        let node = self;
+        let mut found = false;
+        if node.value == value {
+            return true;
+        }
+        if node.left.is_some() {
+            found = node.left.as_ref().unwrap().search(value);
+        }
+        if node.right.is_some() {
+            found = node.right.as_ref().unwrap().search(value);
+        }
+        found
     }
 }
 
@@ -200,7 +221,6 @@ impl Program<Message> for Node {
         let frame_center_x = frame.center().x.clone();
         draw_node(&self, &mut frame, Point::new(frame_center_x, 0.0 + node_radius + 5.0), node_radius);
 
-        // Finally, we produce the geometry
         vec![frame.into_geometry()]
     }
 }
@@ -228,15 +248,35 @@ impl Application for MainPage {
                 self.tree = Node::import(self.tree_nodes.clone());
             },
             Message::Result(value) => self.result = value,
+            Message::InsertValue(value) => self.insert_text = value,
+            Message::Insert => {
+                self.insert = self.insert_text.parse::<i32>().unwrap();
+                self.tree.insert(self.insert);
+            },
+            Message::SearchValue(value) => self.search_text = value,
+            Message::Search => {
+                self.search = self.search_text.parse::<i32>().unwrap();
+                self.result = self.tree.search(self.search).to_string();
+            }
         }
         Command::none()
     }
 
     fn view(&self) -> Element<Message> {
         let label_tree: Text = text("Enter your tree:").size(16);
-        let input_tree = text_input::TextInput::new("ej. 1,2,3,4,5,...", &self.text).on_input(Message::TreeNodes).on_submit(Message::Submit);
-        let submit_button= button("Submit").on_press(Message::Submit);
+        let input_tree: text_input::TextInput<Message, Theme, Renderer> = text_input::TextInput::new("ej. 1,2,3,4,5,...", &self.text).on_input(Message::TreeNodes).on_submit(Message::Submit);
+        let submit_button: button::Button<Message, Theme, Renderer>= button("Submit").on_press(Message::Submit);
         let tree_input = row![label_tree, input_tree, submit_button].spacing(10);
+
+        let label_insert: Text = text("Enter a value to insert:").size(16);
+        let input_insert: text_input::TextInput<Message, Theme, Renderer> = text_input::TextInput::new("ej. 23", &self.insert_text).on_input(Message::InsertValue).on_submit(Message::Insert);
+        let submit_insert: button::Button<Message, Theme, Renderer> = button("Insert").on_press(Message::Insert);
+        let insert_input: iced::widget::Row<Message, Theme, Renderer> = row![label_insert, input_insert, submit_insert].spacing(10);
+
+        let label_search: Text = text("Enter a value to search:").size(16);
+        let input_search: text_input::TextInput<Message, Theme, Renderer> = text_input::TextInput::new("ej. 23", &self.search_text).on_input(Message::SearchValue).on_submit(Message::Search);
+        let submit_search: button::Button<Message, Theme, Renderer> = button("Search").on_press(Message::Search);
+        let search_input: iced::widget::Row<Message, Theme, Renderer> = row![label_search, input_search, submit_search].spacing(10);
 
         let button_inorder = button("Inorder").on_press(Message::Result(inorder_traversal(&self.tree)));
         let button_preorder = button("Preorder").on_press(Message::Result(preorder_traversal(&self.tree)));
@@ -247,7 +287,8 @@ impl Application for MainPage {
         let result: Text = text(&self.result).size(20);
         let screen: Element<Message> = canvas::Canvas::new(&self.tree).width(Length::Fill).height(Length::Fill).into();
         println!("{}", self.tree.childs);
-        let interface = column![tree_input, traversal_inputs, result, screen].padding(20).align_items(iced::Alignment::Center).spacing(10);
+
+        let interface = column![tree_input, insert_input, search_input, traversal_inputs, result, screen].padding(20).align_items(iced::Alignment::Center).spacing(10);
         interface.into()
     }
-}
+    }

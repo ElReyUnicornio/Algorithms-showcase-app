@@ -1,5 +1,7 @@
 use iced::widget::canvas::{Frame, Geometry, LineDash, Path, Program};
 use iced::mouse::Cursor;
+use iced::{event, Event, mouse};
+use iced::Subscription;
 use iced::widget::text::LineHeight;
 use iced::{Application, Color, Command, Element, Font, Length, Pixels, Point, Rectangle, Renderer, Settings, Theme};
 use iced::widget::{button, canvas, column, row, text, text_input, Text};
@@ -18,6 +20,9 @@ struct MainPage {
     search_text: String,
     search: i32,
     result: String,
+    //canvas events data
+    last_mouse_position: Point,
+    canvas_mouse_pressed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +34,7 @@ enum Message {
     InsertValue(String),
     Search,
     SearchValue(String),
+    EventOccurred(Event),
 }
 
 //trees
@@ -38,17 +44,18 @@ struct Node {
     childs: f32,
     left: Option<Box<Node>>,
     right: Option<Box<Node>>,
+    origin: Point,
 }
 
 impl Default for Node{
     fn default() -> Self {
-        Node {value: 0, left: None, right: None, childs: 0.0}
+        Node {value: 0, left: None, right: None, childs: 0.0, origin : Point::new(0.0, 0.0)}
     }
 }
 
 impl Node {
     fn new(value: i32) -> Node {
-        Node {value: value, left: None, right: None , childs: 0.0}
+        Node {value: value, left: None, right: None , childs: 0.0, origin : Point::new(0.0, 0.0)}
     }
 
     fn import(tree_nodes: String) -> Node {
@@ -69,7 +76,7 @@ impl Node {
         if value > node.value {
             node.childs += 1.0;
             if node.right.is_none() {
-                node.right = Some(Box::new(Node {value: value, left: None, right: None, childs: 0.0}));
+                node.right = Some(Box::new(Node {value: value, left: None, right: None, childs: 0.0, origin : Point::new(0.0, 0.0)}));
                 return;
             } else {
                 node.right.as_mut().unwrap().insert(value);
@@ -79,7 +86,7 @@ impl Node {
         if value < node.value {
             node.childs += 1.0;
             if node.left.is_none() {
-                node.left = Some(Box::new(Node {value: value, left: None, right: None, childs: 0.0}));
+                node.left = Some(Box::new(Node {value: value, left: None, right: None, childs: 0.0, origin : Point::new(0.0, 0.0)}));
                 return;
             } else {
                 node.left.as_mut().unwrap().insert(value);
@@ -140,7 +147,7 @@ fn postorder_traversal(node: &Node) -> String {
 
 #[test]
 fn test_insert() {
-    let mut root = Node {value: 1, left: None, right: None, childs: 0.0};
+    let mut root = Node {value: 1, left: None, right: None, childs: 0.0, origin : Point::new(0.0, 0.0)};
     root.insert(2);
     root.insert(3);
     root.insert(4);
@@ -219,7 +226,8 @@ impl Program<Message> for Node {
 
         let node_radius = 20.0;
         let frame_center_x = frame.center().x.clone();
-        draw_node(&self, &mut frame, Point::new(frame_center_x, 0.0 + node_radius + 5.0), node_radius);
+        let origin = Point::new(frame_center_x + self.origin.x, 0.0 + node_radius + 5.0 + self.origin.y);
+        draw_node(&self, &mut frame, origin, node_radius);
 
         vec![frame.into_geometry()]
     }
@@ -257,6 +265,31 @@ impl Application for MainPage {
             Message::Search => {
                 self.search = self.search_text.parse::<i32>().unwrap();
                 self.result = self.tree.search(self.search).to_string();
+            },
+            Message::EventOccurred(_event) => {
+                match _event {
+                    Event::Mouse(event) => {
+                        match event {
+                            mouse::Event::CursorMoved { position } => {
+                                if self.canvas_mouse_pressed {
+                                    let delta_position = position - self.last_mouse_position;
+                                    self.tree.origin = self.tree.origin + delta_position;
+                                    self.last_mouse_position = position;
+                                } else {
+                                    self.last_mouse_position = position;
+                                }
+                            },
+                            mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                                self.canvas_mouse_pressed = true;
+                            },
+                            mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                                self.canvas_mouse_pressed = false;
+                            },
+                            _ => {}
+                        }
+                    },
+                    _ => {}
+                }
             }
         }
         Command::none()
@@ -286,9 +319,12 @@ impl Application for MainPage {
 
         let result: Text = text(&self.result).size(20);
         let screen: Element<Message> = canvas::Canvas::new(&self.tree).width(Length::Fill).height(Length::Fill).into();
-        println!("{}", self.tree.childs);
 
         let interface = column![tree_input, insert_input, search_input, traversal_inputs, result, screen].padding(20).align_items(iced::Alignment::Center).spacing(10);
         interface.into()
     }
+
+    fn subscription(&self) -> Subscription<Message> {
+        event::listen().map(Message::EventOccurred)
     }
+}
